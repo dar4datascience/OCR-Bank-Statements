@@ -39,3 +39,8 @@ tesa_bbva_test_text <- pdf_ocr_text(bbva_test,
 # here lines cannot be recognized due to image size being too small
 tesa_invex_test_text <- pdf_ocr_text(invex_test,
                                      language='spa')
+
+
+# References
+# tabula: https://python.plainenglish.io/how-to-parse-data-tables-from-a-pdf-bank-statement-with-python-ebc3b8dd8990
+# pdftools and tidytext>:https://www.charlesbordet.com/en/extract-pdf/#extract-the-right-information
