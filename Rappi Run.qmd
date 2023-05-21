@@ -80,7 +80,7 @@ purrr::walk2(files_2_download$id,output_paths_pdfs,
 
 ```{r test-run}
 rappy_test <- file.path(
-  here::here('inputs/rappi prod', '202303-rappi.pdf')
+  here::here('inputs/rappi prod', '202206-rappicard')
 )
 
 ```
@@ -113,7 +113,7 @@ if (!is.na(start_index) && !is.na(end_index)) {
   extracted_text <- str_sub(rappy_test_text, start_index, end_index - 1)
   
   # Print the extracted text
-  cat(extracted_text)
+  print(extracted_text)
 } else {
   # Display a message if the markers are not found
   cat("Markers not found in the input string.")
@@ -267,15 +267,18 @@ colnames(records_rappy) <- c("Fecha", "Monto", "Comercio")
 
 ```{r}
 df_clean_rappy <- records_rappy %>% 
-  mutate(
-    Comercio = str_remove(Comercio, "\\$") %>% 
-      str_remove(., ","),
-    Fecha = Fecha %>% 
-      lubridate::parse_date_time(., "ymd"),
-    Monto = as.numeric(Monto)
-  ) %>% 
-  tidyr::fill(Fecha, .direction = "updown") %>% 
-  filter(!stringr::str_detect(Comercio, "^TC"))
+    mutate(
+      Comercio = str_remove(Comercio, "\\$") %>% 
+        str_remove(., ","),
+      Fecha = Fecha %>% 
+        lubridate::parse_date_time(., "ymd", quiet = TRUE),
+      Monto = as.numeric(Monto)
+    ) %>% 
+    tidyr::fill(Fecha, .direction = "updown") %>% 
+    filter(!stringr::str_detect(Comercio, "^TC")) %>% 
+    #remove pago por spei and negative_numbers:puedes extraer el valor de monto pagado ala tc en otro momento
+    filter(Monto>0,
+           !is.na(Monto))
 ```
 
 ### Validate Gasto del Periodo == SUM(Monto)
@@ -321,7 +324,7 @@ input_paths_pdfs <- output_paths_pdfs
 # RUN FOR ONE
 # df_clean_rappy <- input_paths_pdfs[1] %>%
 #   extract_financial_data_into_df()
-
+# 
 
 
 # RUN FOR ALL
@@ -332,7 +335,7 @@ df_clean_rappy <- input_paths_pdfs %>%
 
 ```
 
-### Function v1 works from 202208 till 202302
+### Function v1 works from 202206 till 202302
 
 In STUPID 202303 incluyeron hasta abajo
 

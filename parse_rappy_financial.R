@@ -10,7 +10,7 @@ remove_TC_pattern <- function(text) {
 }
 extract_seccion_movimientos <- function(string){
   start_marker <- "\\n\\n\\n\\n\\n     Movimientos"
-  end_marker <- "( TC\\* Tasa de conversión\\n\\n\\n\\n\\n| Compras diferidas\n\n)"
+  end_marker <- "(  Total pagos del periodo | TC\\* Tasa de conversión\\n\\n\\n\\n\\n| Compras diferidas\n\n)"
   
   # Find the starting index of the desired text
   start_index <- str_locate(string, start_marker)[, "start"]
@@ -59,6 +59,7 @@ split_trim_remove_n_split <- function(semi_clean_text){
 }
 #special remove function
 remove_unnecessary_chars <- function(input_string) {
+ # print(input_string)
   # Remove "$" from the string
   cleaned_string <- str_replace_all(input_string, "\\$", "")
   
@@ -68,6 +69,7 @@ remove_unnecessary_chars <- function(input_string) {
   return(cleaned_string)
 }
 get_gasto_periodo <- function(text_by_columns){
+  #print(text_by_columns)
   #get gasto in periodo
   gasto_en_periodo <- purrr::pluck(text_by_columns, -1)
   clean_gasto_en_periodo <- gasto_en_periodo %>% 
@@ -143,7 +145,10 @@ final_clean_df <- function(records_rappy){
       Monto = as.numeric(Monto)
     ) %>% 
     tidyr::fill(Fecha, .direction = "updown") %>% 
-    filter(!stringr::str_detect(Comercio, "^TC"))
+    filter(!stringr::str_detect(Comercio, "^TC")) %>% 
+    #remove pago por spei and negative_numbers:puedes extraer el valor de monto pagado ala tc en otro momento
+    filter(Monto>0,
+           !is.na(Monto))
   
   return(df_clean_rappy)
 }
@@ -168,34 +173,39 @@ validate_gasto_total_vs_suma_montos <- function(clean_gasto_en_periodo, df_clean
 
 ##### Final Function ##########
 extract_financial_data_into_df <- function(pdf_path){
-  print(pdf_path)
+  print("pdf_text")
   # apply pdf text extraction
   # pdf_text uses lobpoopler
   rappy_test_text <- pdf_text(pdf_path)
-  
+  print("extract seccion movimientos")
   extracted_text <- rappy_test_text %>% 
     extract_seccion_movimientos()
-  
+  print("remove marcas extranjero")
   semi_clean_text <- extracted_text %>% 
     remove_marcas_extranjero()
   
+  print("split trim remove n split")
   text_by_columns <- semi_clean_text %>% 
     split_trim_remove_n_split()
   
+  #print(text_by_columns)
+  
+  print("get gasto periodo")
   # you need this for validation
   clean_gasto_en_periodo <- text_by_columns %>% 
     get_gasto_periodo() 
   
+  print("remove unnecesarry columns")
   # continue parsing
   neccesary_columns_string <- text_by_columns %>% 
     remove_unnecesarry_columns()
-  
+  print("create records rappi df")
   records_rappy <- neccesary_columns_string %>% 
     create_records_rappi_df()
-  
+  print("final clean df")
   df_clean_rappy <- records_rappy %>% 
     final_clean_df()
-    
+  print("validate gasto total")
   #validate
   validate_gasto_total_vs_suma_montos(clean_gasto_en_periodo,df_clean_rappy)
   
