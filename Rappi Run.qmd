@@ -50,11 +50,19 @@ googledrive::drive_auth(email="daniel.amieva@dar4datascience.com")
 files_2_download <- googledrive::drive_ls("https://drive.google.com/drive/u/0/folders/1Det2HALrcaiR1tPQMYgkjRXEIyPkgZBS",
                                          type = 'pdf' )
 
+
 download_location <- here::here("inputs/rappi prod/")
+
+#output paths 
+output_paths_pdfs <- files_2_download$name %>% 
+  purrr::map_chr(
+    ~glue(download_location, .x)
+  )
+
 
 ```
 
-```{r download-data}
+```{r download-data, eval=FALSE}
 download_rappi_statements <- function(input_path, output_path){
   googledrive::drive_download(input_path,
                               output_path,
@@ -64,12 +72,6 @@ download_rappi_statements <- function(input_path, output_path){
 
 safely_download_rappi_statements <- safely(download_rappi_statements)
 
-#output paths 
-output_paths_pdfs <- files_2_download$name %>% 
-  purrr::map_chr(
-    ~glue(download_location, .x)
-  )
-
 purrr::walk2(files_2_download$id,output_paths_pdfs,
             ~safely_download_rappi_statements(.x, .y))
 ```
@@ -78,7 +80,7 @@ purrr::walk2(files_2_download$id,output_paths_pdfs,
 
 ```{r test-run}
 rappy_test <- file.path(
-  here::here('inputs/rappi prod', '202208-rappicard.pdf')
+  here::here('inputs/rappi prod', '202303-rappi.pdf')
 )
 
 ```
@@ -94,13 +96,13 @@ rappy_test_text <- pdf_text(rappy_test)
 
 ```{r}
 start_marker <- "\\n\\n\\n\\n\\n     Movimientos"
-end_marker <- "( TC\\* Tasa de conversión\\n\\n\\n\\n\\n| Compras diferidas\n\n)"
+end_marker <- "(  Total pagos del periodo | TC\\* Tasa de conversión\\n\\n\\n\\n\\n| Compras diferidas\n\n)"
 
 # Find the starting index of the desired text
-start_index <- str_locate(text, start_marker)[, "start"]
+start_index <- str_locate(rappy_test_text, start_marker)[, "start"]
 
 # Find the ending index of the desired text
-end_index <- str_locate(text, end_marker)[, "start"]
+end_index <- str_locate(rappy_test_text, end_marker)[, "start"]
 
 # Check if the start and end markers are found
 if (!is.na(start_index) && !is.na(end_index)) {
@@ -108,7 +110,7 @@ if (!is.na(start_index) && !is.na(end_index)) {
   start_index <- start_index + nchar(start_marker)
   
   # Extract the desired text using str_sub
-  extracted_text <- str_sub(text, start_index, end_index - 1)
+  extracted_text <- str_sub(rappy_test_text, start_index, end_index - 1)
   
   # Print the extracted text
   cat(extracted_text)
@@ -119,11 +121,23 @@ if (!is.na(start_index) && !is.na(end_index)) {
 
 ```
 
-### Remove unneccesary content
+### Remove unnecessary content
 
 ```{r}
+remove_TC_pattern <- function(text) {
+  # Pattern to match strings with the desired pattern
+  pattern <- "T[Cc]\\d{2}\\.\\d{2}\\n\\n"
+  
+  # Extract strings matching the pattern
+  clean_strings <- str_remove_all(text, pattern)[[1]]
+  
+  return(clean_strings)
+}
+
+
+
 semi_clean_text <- extracted_text %>% 
-  remove_strings_with_pattern() %>% 
+  remove_TC_pattern() %>% 
   str_remove_all(., "Extranjero\\n") %>% 
   #remove dollars
   str_remove_all(., "USD \\d+.\\d+") %>% 
@@ -174,9 +188,6 @@ remove_unnecessary_chars <- function(input_string) {
   # Remove "," from the string
   cleaned_string <- str_replace_all(cleaned_string, ",", "")
   
-  # Remove "." from the string
-  cleaned_string <- str_replace_all(cleaned_string, "\\.", "")
-  
   return(cleaned_string)
 }
 ```
@@ -191,6 +202,8 @@ clean_gasto_en_periodo <- gasto_en_periodo %>%
   # clean string
   remove_unnecessary_chars() %>% 
   as.numeric()
+
+clean_gasto_en_periodo
 ```
 
 ### Remove first and last records
@@ -220,12 +233,13 @@ str_rappy_df <- function(columns_string){
     str_remove(., "\\d{4}-\\d{2}-\\d{2}") %>% 
     str_remove("\\$\\d+.\\d+") %>% 
     # clean string
-    remove_unnecessary_chars() 
+    remove_unnecessary_chars() %>% 
+    str_remove("\\.\\d{2}")
   
   
-  print(fechas)
-  print(montos)
-  print(conceptos)
+  # print(fechas)
+  # print(montos)
+  # print(conceptos)
   
   df <- tibble(
     "fecha" = fechas,
@@ -246,7 +260,7 @@ records_rappy <- neccesary_columns %>%
   )
 
 # Rename the columns
-colnames(records_rappy) <- c("Fecha", "Comercio", "Monto")
+colnames(records_rappy) <- c("Fecha", "Monto", "Comercio")
 ```
 
 ### Final Clean
@@ -257,21 +271,33 @@ df_clean_rappy <- records_rappy %>%
     Comercio = str_remove(Comercio, "\\$") %>% 
       str_remove(., ","),
     Fecha = Fecha %>% 
-      lubridate::parse_date_time(., "ymd")
+      lubridate::parse_date_time(., "ymd"),
+    Monto = as.numeric(Monto)
   ) %>% 
-  tidyr::fill(Fecha, .direction = "updown")
+  tidyr::fill(Fecha, .direction = "updown") %>% 
+  filter(!stringr::str_detect(Comercio, "^TC"))
+```
+
+### Validate Gasto del Periodo == SUM(Monto)
+
+suma_montos\$total_gasto
+
+```{r validationdf}
+suma_montos <- df_clean_rappy %>% 
+  summarize(
+    total_gasto = sum(Monto, na.rm = TRUE)
+  )
+
+round(clean_gasto_en_periodo, digits = 2) == round(suma_montos$total_gasto, digits = 2)
 ```
 
 ## Upload Results to Google Sheets
 
 ```{r connect2sheet}
 googlesheets4::gs4_auth(email = "daniel.amieva@dar4datascience.com")
-
-rappi_statement_records_sheet <- googlesheets4::read_sheet("https://docs.google.com/spreadsheets/d/1przfdI8MDLWf9rYPgOY9T0XLzEbhb9-xM1Gs-K6dgnY/edit#gid=1249355448",
-                                                           sheet = "Finanzas Rappi Credit")
 ```
 
-```{r write-results-append}
+```{r write-results-append, eval=FALSE}
 googlesheets4::sheet_append("https://docs.google.com/spreadsheets/d/1przfdI8MDLWf9rYPgOY9T0XLzEbhb9-xM1Gs-K6dgnY/edit#gid=1249355448",
                                                      df_clean_rappy,
                                                            sheet = "Finanzas Rappi Credit")
@@ -279,8 +305,50 @@ googlesheets4::sheet_append("https://docs.google.com/spreadsheets/d/1przfdI8MDLW
 
 ### Check it out by reading in
 
-```{r checkresults}
-rappy_results_test <- googlesheets4::sheet_appendgooglesheets4::read_sheet("https://docs.google.com/spreadsheets/d/1przfdI8MDLWf9rYPgOY9T0XLzEbhb9-xM1Gs-K6dgnY/edit#gid=1249355448",
-                                                     df_clean_rappy,
+```{r checkresults, eval=FALSE}
+rappy_results_test <-googlesheets4::read_sheet("https://docs.google.com/spreadsheets/d/1przfdI8MDLWf9rYPgOY9T0XLzEbhb9-xM1Gs-K6dgnY/edit#gid=1249355448",                                        sheet = "Finanzas Rappi Credit")
+```
+
+## Now do it for all by calling functions from a script
+
+```{r scriptway, eval=FALSE}
+source("parse_rappy_financial.R")
+
+#output paths pdf becomes input paths
+input_paths_pdfs <- output_paths_pdfs
+
+# 1 function to rule them all
+# RUN FOR ONE
+# df_clean_rappy <- input_paths_pdfs[1] %>%
+#   extract_financial_data_into_df()
+
+
+
+# RUN FOR ALL
+df_clean_rappy <- input_paths_pdfs %>%
+  purrr::map_df(
+  ~extract_financial_data_into_df(.x)
+  )
+
+```
+
+### Function v1 works from 202208 till 202302
+
+In STUPID 202303 incluyeron hasta abajo
+
+Total cargos del periodo\$18,696.22
+
+Total pagos del periodo\$19,000.00
+
+Creand confusion!!!!
+
+Queremos Total cargos del periodo
+
+## Finally upload results
+
+```{r uploadresults2sheets}
+googlesheets4::sheet_append("https://docs.google.com/spreadsheets/d/1przfdI8MDLWf9rYPgOY9T0XLzEbhb9-xM1Gs-K6dgnY/edit#gid=1249355448",
+                                                     df_clean_rappy
+                            ,
                                                            sheet = "Finanzas Rappi Credit")
 ```
