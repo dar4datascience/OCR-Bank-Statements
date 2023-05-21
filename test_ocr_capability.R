@@ -6,6 +6,7 @@ library(pdftools)
 library(magrittr)
 library(glue)
 library(stringr)
+library(tesseract)
 
 rappy_test <- file.path(
   here::here('inputs', '202210-rappicard.pdf')
@@ -36,9 +37,11 @@ invex_test_text <- pdf_text(invex_test) %>%
 # diferencia entre hojas
 tesa_bbva_test_text <- pdf_ocr_text(bbva_test,
                                     language='spa')
-# here lines cannot be recognized due to image size being too small
-tesa_invex_test_text <- pdf_ocr_text(invex_test,
-                                     language='spa')
+# # here lines cannot be recognized due to image size being too small
+# tesa_invex_test_text <- pdf_ocr_text(invex_test,
+#                                      language='spa')
+
+
 
 
 # References
