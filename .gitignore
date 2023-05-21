@@ -41,3 +41,4 @@ vignettes/*.pdf
 #ignore certain foldes
 inputs/
 outputs/
+renv/
