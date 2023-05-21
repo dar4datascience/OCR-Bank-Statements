@@ -1,0 +1,286 @@
+---
+title: "Rappy Parse Run"
+format: html
+editor: visual
+---
+
+## Notebook to run Rappi Financial Statements
+
+Process:
+
+1.  Download data from google drive into the rappi prod folder
+2.  For each Pdf:
+    1.  apply pdf_text
+    2.  extract seccion de Movimientos by capturing content between two string markers
+    3.  remove unneccesary content
+    4.  string split by line jump
+    5.  trim
+    6.  remove empty rows
+    7.  ? extract gasto en periodo
+    8.  Split each row into columns based on whitespace
+    9.  apply str_rappy_df function to make data.frame with 3 columns: fechas, montos, conceptos
+3.  Upload Results to Google Sheets
+
+```{r setup}
+pacman::p_load(
+  googledrive,
+  googlesheets4,
+  dplyr,
+  tidyr,
+  stringr,
+  purrr,
+  tibble,
+  pdftools,
+  glue
+)
+
+here::i_am("Rappi Run.qmd")
+```
+
+## Download data from Google Drive
+
+```{r driveauth}
+googledrive::drive_auth(email="daniel.amieva@dar4datascience.com")
+```
+
+```{r find-pdfs}
+#| echo: false
+# list files 2 dowload
+# estados de cuenta/ rappi credit card
+files_2_download <- googledrive::drive_ls("https://drive.google.com/drive/u/0/folders/1Det2HALrcaiR1tPQMYgkjRXEIyPkgZBS",
+                                         type = 'pdf' )
+
+download_location <- here::here("inputs/rappi prod/")
+
+```
+
+```{r download-data}
+download_rappi_statements <- function(input_path, output_path){
+  googledrive::drive_download(input_path,
+                              output_path,
+                               "application/pdf",
+                              overwrite = TRUE)
+}
+
+safely_download_rappi_statements <- safely(download_rappi_statements)
+
+#output paths 
+output_paths_pdfs <- files_2_download$name %>% 
+  purrr::map_chr(
+    ~glue(download_location, .x)
+  )
+
+purrr::walk2(files_2_download$id,output_paths_pdfs,
+            ~safely_download_rappi_statements(.x, .y))
+```
+
+## For each pdf
+
+```{r test-run}
+rappy_test <- file.path(
+  here::here('inputs/rappi prod', '202208-rappicard.pdf')
+)
+
+```
+
+### Apply pdf_text
+
+```{r}
+# pdf_text uses lobpoopler
+rappy_test_text <- pdf_text(rappy_test)
+```
+
+### Extract seccion de Movimientos by capturing content between two string markers
+
+```{r}
+start_marker <- "\\n\\n\\n\\n\\n     Movimientos"
+end_marker <- "( TC\\* Tasa de conversión\\n\\n\\n\\n\\n| Compras diferidas\n\n)"
+
+# Find the starting index of the desired text
+start_index <- str_locate(text, start_marker)[, "start"]
+
+# Find the ending index of the desired text
+end_index <- str_locate(text, end_marker)[, "start"]
+
+# Check if the start and end markers are found
+if (!is.na(start_index) && !is.na(end_index)) {
+  # Adjust the start index to exclude the marker
+  start_index <- start_index + nchar(start_marker)
+  
+  # Extract the desired text using str_sub
+  extracted_text <- str_sub(text, start_index, end_index - 1)
+  
+  # Print the extracted text
+  cat(extracted_text)
+} else {
+  # Display a message if the markers are not found
+  cat("Markers not found in the input string.")
+}
+
+```
+
+### Remove unneccesary content
+
+```{r}
+semi_clean_text <- extracted_text %>% 
+  remove_strings_with_pattern() %>% 
+  str_remove_all(., "Extranjero\\n") %>% 
+  #remove dollars
+  str_remove_all(., "USD \\d+.\\d+") %>% 
+  # remove zeors
+  str_remove_all(., "\\$0\\.00")
+
+
+semi_clean_text
+```
+
+### String split by line jump
+
+```{r}
+# Split the string into rows based on line jumps
+rows <- strsplit(semi_clean_text, "\n")[[1]]
+
+```
+
+### Trim
+
+```{r}
+# Remove leading and trailing whitespace from each row
+rows <- trimws(rows)
+```
+
+### Remove empty rows
+
+```{r}
+# Remove empty rows
+rows <- rows[rows != ""]
+```
+
+### Split each row into columns based on whitespace
+
+```{r}
+# Split each row into columns based on whitespace
+columns <- strsplit(rows, "\\s+") 
+```
+
+### Define function to remove content
+
+```{r}
+#special remove function
+remove_unnecessary_chars <- function(input_string) {
+  # Remove "$" from the string
+  cleaned_string <- str_replace_all(input_string, "\\$", "")
+  
+  # Remove "," from the string
+  cleaned_string <- str_replace_all(cleaned_string, ",", "")
+  
+  # Remove "." from the string
+  cleaned_string <- str_replace_all(cleaned_string, "\\.", "")
+  
+  return(cleaned_string)
+}
+```
+
+### Extract gasto en periodo
+
+```{r}
+#get gasto in periodo
+gasto_en_periodo <- purrr::pluck(columns, -1)
+clean_gasto_en_periodo <- gasto_en_periodo %>% 
+  dplyr::last() %>% 
+  # clean string
+  remove_unnecessary_chars() %>% 
+  as.numeric()
+```
+
+### Remove first and last records
+
+```{r}
+# remove last recrod and first record and third cause i establish columns
+penalast_record <- length(columns) - 1
+neccesary_columns <- columns[3:penalast_record]
+
+```
+
+### Apply str_rappy_df function to make data.frame with 3 columns: fechas, montos, conceptos
+
+```{r}
+
+str_rappy_df <- function(columns_string){
+  fechas <- columns_string %>% 
+    purrr::pluck(., 1, 1)
+  
+  montos <- columns_string %>% 
+    purrr::pluck(., -1, 1) %>% 
+    # clean string
+    remove_unnecessary_chars()
+  
+  conceptos <- columns_string %>% 
+    glue::glue_collapse(., sep = "") %>% 
+    str_remove(., "\\d{4}-\\d{2}-\\d{2}") %>% 
+    str_remove("\\$\\d+.\\d+") %>% 
+    # clean string
+    remove_unnecessary_chars() 
+  
+  
+  print(fechas)
+  print(montos)
+  print(conceptos)
+  
+  df <- tibble(
+    "fecha" = fechas,
+    "monto" = montos,
+    "concepto" = conceptos
+  )
+  
+}
+
+```
+
+```{r}
+
+# Create a dataframe from the columns
+records_rappy <- neccesary_columns %>% 
+  purrr::map_dfr(
+    ~str_rappy_df(.x)
+  )
+
+# Rename the columns
+colnames(records_rappy) <- c("Fecha", "Comercio", "Monto")
+```
+
+### Final Clean
+
+```{r}
+df_clean_rappy <- records_rappy %>% 
+  mutate(
+    Comercio = str_remove(Comercio, "\\$") %>% 
+      str_remove(., ","),
+    Fecha = Fecha %>% 
+      lubridate::parse_date_time(., "ymd")
+  ) %>% 
+  tidyr::fill(Fecha, .direction = "updown")
+```
+
+## Upload Results to Google Sheets
+
+```{r connect2sheet}
+googlesheets4::gs4_auth(email = "daniel.amieva@dar4datascience.com")
+
+rappi_statement_records_sheet <- googlesheets4::read_sheet("https://docs.google.com/spreadsheets/d/1przfdI8MDLWf9rYPgOY9T0XLzEbhb9-xM1Gs-K6dgnY/edit#gid=1249355448",
+                                                           sheet = "Finanzas Rappi Credit")
+```
+
+```{r write-results-append}
+googlesheets4::sheet_append("https://docs.google.com/spreadsheets/d/1przfdI8MDLWf9rYPgOY9T0XLzEbhb9-xM1Gs-K6dgnY/edit#gid=1249355448",
+                                                     df_clean_rappy,
+                                                           sheet = "Finanzas Rappi Credit")
+```
+
+### Check it out by reading in
+
+```{r checkresults}
+rappy_results_test <- googlesheets4::sheet_appendgooglesheets4::read_sheet("https://docs.google.com/spreadsheets/d/1przfdI8MDLWf9rYPgOY9T0XLzEbhb9-xM1Gs-K6dgnY/edit#gid=1249355448",
+                                                     df_clean_rappy,
+                                                           sheet = "Finanzas Rappi Credit")
+```
