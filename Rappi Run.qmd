@@ -333,6 +333,9 @@ df_clean_rappy <- input_paths_pdfs %>%
   ~extract_financial_data_into_df(.x)
   )
 
+# RETURNS DUPLICATES FOR SOME REASON
+df_clean_rappy <- df_clean_rappy %>% 
+  distinct()
 ```
 
 ### Function v1 works from 202206 till 202302
@@ -349,9 +352,24 @@ Queremos Total cargos del periodo
 
 ## Finally upload results
 
-```{r uploadresults2sheets}
+```{r uploadresults2sheets, eval=FALSE}
 googlesheets4::sheet_append("https://docs.google.com/spreadsheets/d/1przfdI8MDLWf9rYPgOY9T0XLzEbhb9-xM1Gs-K6dgnY/edit#gid=1249355448",
                                                      df_clean_rappy
                             ,
                                                            sheet = "Finanzas Rappi Credit")
+```
+
+### Save results as csv backup
+
+```{r}
+df_clean_rappy %>% 
+  write.csv(
+    here::here("outputs", "unified_statements_rappy_202206_a_202304.csv"),
+    row.names = FALSE
+  )
+  
+ here::here("outputs", "unified_statements_rappy_202206_a_202304.csv") %>%  googledrive::drive_put(
+   #estados de cuenta > unified statements csv
+                        "https://drive.google.com/drive/u/0/folders/1WygQuUekXxL5HDdxfmGPfGVmFwCdgork"  ,
+                        name = "unified_statements_rappy_202206_a_202304.csv")
 ```
