@@ -353,9 +353,9 @@ Queremos Total cargos del periodo
 ## Finally upload results
 
 ```{r uploadresults2sheets, eval=FALSE}
-googlesheets4::sheet_append("https://docs.google.com/spreadsheets/d/1przfdI8MDLWf9rYPgOY9T0XLzEbhb9-xM1Gs-K6dgnY/edit#gid=1249355448",
-                                                     df_clean_rappy
-                            ,
+googlesheets4::sheet_write(
+                                                     df_clean_rappy,
+                                                     "https://docs.google.com/spreadsheets/d/1przfdI8MDLWf9rYPgOY9T0XLzEbhb9-xM1Gs-K6dgnY/edit#gid=1249355448",
                                                            sheet = "Finanzas Rappi Credit")
 ```
 
@@ -363,13 +363,12 @@ googlesheets4::sheet_append("https://docs.google.com/spreadsheets/d/1przfdI8MDLW
 
 ```{r}
 df_clean_rappy %>% 
-  write.csv(
-    here::here("outputs", "unified_statements_rappy_202206_a_202304.csv"),
-    row.names = FALSE
+  readr::write_csv(
+    here::here("outputs", "unified_statements_rappy_202206_a_202309.csv")
   )
   
- here::here("outputs", "unified_statements_rappy_202206_a_202304.csv") %>%  googledrive::drive_put(
+ here::here("outputs", "unified_statements_rappy_202206_a_202309.csv") %>%  googledrive::drive_put(
    #estados de cuenta > unified statements csv
                         "https://drive.google.com/drive/u/0/folders/1WygQuUekXxL5HDdxfmGPfGVmFwCdgork"  ,
-                        name = "unified_statements_rappy_202206_a_202304.csv")
+                        name = "unified_statements_rappy_202206_a_202309.csv")
 ```
