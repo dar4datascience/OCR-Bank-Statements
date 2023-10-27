@@ -18,7 +18,10 @@ safe_bbva_parse <- bbva_financial_pdf |>
 
 full_bbva_credit_data <- safe_bbva_parse |> 
   map("result") |> 
-  list_rbind() 
+  list_rbind() |> 
+  mutate(
+    pago_tdc = str_detect(Concept, "TDC")
+  )
 
 errors_bbva_credit_data <- safe_bbva_parse |> 
   map("error") |> 
