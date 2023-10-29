@@ -1,8 +1,12 @@
 library(shiny)
 library(bslib)
-library(purrr)
+library(purrr) 
 library(reactablefmtr)
 source(here::here("Logic", "parse_bbva_debito.R"))
+source(
+    here::here("Logic",
+               "pdf_miner_reticulate_env.R")
+)
 safe_parse_bbva_debito <- safely(shiny_parse_bbva_debito)
 ui <- page_fillable(
     theme = bs_theme(bootswatch = "cyborg"),
